@@ -29,25 +29,25 @@ export function buildServer() {
   const app = Fastify({ logger: true });
   const staticRoot = env.STATIC_ROOT ? resolve(env.STATIC_ROOT) : null;
 
-  app.register(cors, {
-    origin(origin, callback) {
-      if (isAllowedOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`Origin ${origin ?? "unknown"} is not allowed by CORS`), false);
-    },
-    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true
-  });
-
   app.get("/health", async () => ({
     ok: true,
     service: "club-api"
   }));
 
   app.register(async (instance) => {
+    instance.register(cors, {
+      origin(origin, callback) {
+        if (isAllowedOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error(`Origin ${origin ?? "unknown"} is not allowed by CORS`), false);
+      },
+      methods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
+      credentials: true
+    });
+
     instance.register(authRoutes, { prefix: "/auth" });
     instance.register(tableRoutes, { prefix: "/tables" });
     instance.register(bookingRoutes, { prefix: "/bookings" });
