@@ -1,0 +1,19 @@
+{
+  "name": "dnd-tg-app",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @club/web run dev",
+    "dev:api": "npm --workspace @club/api run dev",
+    "build": "npm --workspaces run build",
+    "lint": "npm --workspaces run lint",
+    "test": "npm --workspace @club/api run test",
+    "db:generate": "npm --workspace @club/api exec -- prisma generate --schema ../../db/prisma/schema.prisma",
+    "db:push": "npm --workspace @club/api exec -- prisma db push --schema ../../db/prisma/schema.prisma",
+    "db:studio": "npm --workspace @club/api exec -- prisma studio --schema ../../db/prisma/schema.prisma",
+    "db:seed": "npm --workspace @club/api run seed"
+  }
+}

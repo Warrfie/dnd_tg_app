@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GameCategory {
+  boardgame
+  dnd
+  warhammer
+  other
+}
+
+enum BookingStatus {
+  active
+  cancelled
+  completed
+}
+
+enum ParticipantRole {
+  organizer
+  player
+  gm
+  guest
+}
+
+model Table {
+  id        Int       @id @default(autoincrement())
+  name      String
+  capacity  Int?
+  isActive  Boolean   @default(true)
+  bookings  Booking[]
+}
+
+model Member {
+  id             Int                  @id @default(autoincrement())
+  telegramUserId BigInt?              @unique
+  username       String?
+  firstName      String
+  lastName       String?
+  isAdmin        Boolean              @default(false)
+  isActive       Boolean              @default(true)
+  bookings       Booking[]            @relation("BookingCreator")
+  participants   BookingParticipant[]
+}
+
+model Game {
+  id                 Int       @id @default(autoincrement())
+  title              String
+  category           GameCategory
+  defaultDescription String?
+  bookings           Booking[]
+}
+
+model Booking {
+  id                Int                  @id @default(autoincrement())
+  tableId           Int
+  createdByMemberId Int
+  gameId            Int?
+  customGameTitle   String
+  description       String?
+  startAt           DateTime
+  endAt             DateTime
+  isPrivate         Boolean              @default(false)
+  openToJoin        Boolean              @default(true)
+  participantsCount Int
+  status            BookingStatus        @default(active)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  table             Table                @relation(fields: [tableId], references: [id])
+  createdByMember   Member               @relation("BookingCreator", fields: [createdByMemberId], references: [id])
+  game              Game?                @relation(fields: [gameId], references: [id])
+  participants      BookingParticipant[]
+
+  @@index([tableId, startAt, endAt])
+}
+
+model BookingParticipant {
+  id        Int             @id @default(autoincrement())
+  bookingId Int
+  memberId  Int
+  role      ParticipantRole @default(player)
+  booking   Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  member    Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, memberId])
+}
