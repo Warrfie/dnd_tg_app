@@ -17,6 +17,28 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: dnd_tg_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: 4000
+      STATIC_ROOT: /app/apps/web/dist
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
-

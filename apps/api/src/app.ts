@@ -1,5 +1,8 @@
 import cors from "@fastify/cors";
+import staticPlugin from "@fastify/static";
 import Fastify from "fastify";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { env } from "./config.js";
 import { authRoutes } from "./modules/auth/routes.js";
 import { bookingRoutes } from "./modules/bookings/routes.js";
@@ -24,6 +27,7 @@ function isAllowedOrigin(origin?: string) {
 
 export function buildServer() {
   const app = Fastify({ logger: true });
+  const staticRoot = env.STATIC_ROOT ? resolve(env.STATIC_ROOT) : null;
 
   app.register(cors, {
     origin(origin, callback) {
@@ -49,6 +53,22 @@ export function buildServer() {
     instance.register(bookingRoutes, { prefix: "/bookings" });
     instance.register(memberRoutes, { prefix: "/members" });
   }, { prefix: "/api" });
+
+  if (staticRoot && existsSync(staticRoot)) {
+    app.register(staticPlugin, {
+      root: staticRoot,
+      prefix: "/"
+    });
+
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith("/api")) {
+        reply.status(404).send({ ok: false, error: "Route not found" });
+        return;
+      }
+
+      reply.type("text/html").sendFile("index.html");
+    });
+  }
 
   return app;
 }

@@ -16,10 +16,26 @@ Starter scaffold for a Telegram Mini App used by a private board games club.
 - private/open games
 - DnD-friendly booking description
 
-## Next steps
+## One-command server run
 
-1. Install dependencies with `npm install`
-2. Fill root `.env`
-3. Run Prisma migration
-4. Start frontend and backend
-5. Connect bot menu button and `startapp` link
+1. Clone the repository
+2. Create root `.env`
+3. Run `make run`
+
+This target will:
+
+- stop stale local processes on ports `3000` and `4000`;
+- restart Docker Compose services;
+- start PostgreSQL;
+- build the app container;
+- apply Prisma schema;
+- seed default data;
+- start the app in detached mode with automatic restart policy.
+
+Useful commands:
+
+- `make run` - restart everything cleanly
+- `make status` - show container status
+- `make logs` - follow logs
+- `make stop` - stop containers
+- `make down` - stop and remove containers

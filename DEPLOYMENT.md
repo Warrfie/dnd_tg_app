@@ -58,6 +58,39 @@ Use this for the actual club members.
 - database: managed Postgres with backups
 - bot menu button and Main Mini App set to production URL
 
+## One-command server start for this repository
+
+The repository now includes a `Makefile` and a production-style Docker Compose flow.
+
+After `git clone` and creating the root `.env`, the main command is:
+
+```bash
+make run
+```
+
+What it does:
+
+- kills stale processes on ports `3000` and `4000`;
+- runs `docker compose down --remove-orphans`;
+- builds the app image;
+- starts PostgreSQL and the app in detached mode;
+- waits for `/health`;
+- uses container restart policy `unless-stopped`.
+
+Useful commands:
+
+```bash
+make status
+make logs
+make stop
+make down
+```
+
+The app is served from one container on one port:
+
+- app UI: `http://server:4000`
+- API: `http://server:4000/api`
+
 ## Fast local start for this repository
 
 ### 1. Install dependencies
@@ -93,24 +126,18 @@ Now all parts of the project read from the same root `.env`:
 - backend API
 - Vite frontend
 
-### 4. Start the backend
+### 4. Start everything with one command
 
 ```bash
-npm run dev:api
+make run
 ```
 
-### 5. Start the frontend
+### 5. Open the local app in browser
 
-```bash
-npm run dev:web
-```
-
-### 6. Open the local app in browser
-
-- frontend: `http://localhost:3000`
+- app UI: `http://localhost:4000`
 - backend health: `http://localhost:4000/health`
 
-This is enough to test layout and API stubs in a browser before Telegram integration.
+This is enough to test the app in a browser before Telegram integration.
 
 ## How to test inside Telegram locally
 
@@ -121,7 +148,7 @@ Telegram mobile clients need a public HTTPS URL. The simplest options are:
 Quick testing:
 
 ```bash
-cloudflared tunnel --url http://localhost:3000
+cloudflared tunnel --url http://localhost:4000
 ```
 
 This gives you a temporary public HTTPS URL on `trycloudflare.com`.
@@ -140,10 +167,10 @@ Limitations from Cloudflare docs:
 ### Option B: ngrok
 
 ```bash
-ngrok http 3000
+ngrok http 4000
 ```
 
-This gives you a public HTTPS URL that forwards to local frontend.
+This gives you a public HTTPS URL that forwards to the app container.
 
 Use it when:
 
@@ -226,9 +253,9 @@ For this project, the cleanest staging stack is:
 
 The shortest path to something you can touch today is:
 
-1. run the frontend and backend locally;
+1. run the app locally;
 2. verify browser flow on `localhost`;
-3. expose the frontend through Cloudflare Tunnel or ngrok;
+3. expose the app through Cloudflare Tunnel or ngrok;
 4. connect that URL to a test bot in Telegram;
 5. only after that set up a staging deployment.
 
