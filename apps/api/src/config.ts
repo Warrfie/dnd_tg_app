@@ -15,10 +15,9 @@ if (existsSync(rootEnvPath)) {
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
-  WEB_ORIGIN: z.string().default("http://localhost:3000"),
+  WEB_ORIGIN: z.string().default("http://localhost:4000"),
   DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/dnd_tg_app"),
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
-  VITE_API_BASE_URL: z.string().default("http://localhost:4000/api"),
   STATIC_ROOT: z.string().optional()
 });
 

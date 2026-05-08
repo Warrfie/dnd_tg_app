@@ -32,6 +32,8 @@ services:
     environment:
       PORT: 4000
       STATIC_ROOT: /app/apps/web/dist
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dnd_tg_app
+      TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dnd_tg_app_test
     ports:
       - "4000:4000"
     healthcheck:

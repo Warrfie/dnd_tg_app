@@ -107,24 +107,26 @@ docker compose up -d
 
 This uses [docker-compose.yml](/Users/warrfie/dnd_tg_app/docker-compose.yml) and starts Postgres on `localhost:5432`.
 
-### 3. Create one root env file
+### 3. Create one minimal root env file
 
 Root `.env`:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dnd_tg_app
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dnd_tg_app_test
 TELEGRAM_BOT_TOKEN=replace_me
-WEB_ORIGIN=http://localhost:3000
-PORT=4000
-VITE_API_BASE_URL=http://localhost:4000/api
+WEB_ORIGIN=http://localhost:4000
 ```
 
 Now all parts of the project read from the same root `.env`:
 
-- Prisma commands from the repo root
 - backend API
-- Vite frontend
+- Dockerized runtime
+
+Internal infrastructure values are no longer part of user-managed `.env`:
+
+- database URLs
+- test database URL
+- app port
+- frontend API base URL
 
 ### 4. Start everything with one command
 
@@ -206,10 +208,8 @@ For this project, the cleanest staging stack is:
 ### Staging checklist
 
 1. deploy frontend with environment variable:
-   - `VITE_API_BASE_URL=https://api-staging.example.com/api`
-2. deploy backend with:
-   - `DATABASE_URL`
-   - `TEST_DATABASE_URL`
+   - not needed in the single-container mode, frontend talks to `/api`
+2. deploy root `.env` with:
    - `TELEGRAM_BOT_TOKEN`
    - `WEB_ORIGIN=https://staging.example.com`
 3. point the bot Mini App URL at `https://staging.example.com`

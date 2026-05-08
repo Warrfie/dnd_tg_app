@@ -22,6 +22,13 @@ Starter scaffold for a Telegram Mini App used by a private board games club.
 2. Create root `.env`
 3. Run `make run`
 
+Minimal root `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=replace_me
+WEB_ORIGIN=http://localhost:4000
+```
+
 This target will:
 
 - stop stale local processes on ports `3000` and `4000`;
@@ -39,3 +46,11 @@ Useful commands:
 - `make logs` - follow logs
 - `make stop` - stop containers
 - `make down` - stop and remove containers
+
+What is intentionally not stored in root `.env`:
+
+- database URLs
+- internal app port
+- frontend API base URL
+
+Those values are provided by Docker Compose and app defaults.
