@@ -12,7 +12,7 @@ restart: clean-ports
 	$(COMPOSE) down --remove-orphans
 	$(COMPOSE) up -d --build
 	@echo "Waiting for application health..."
-	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do \
 		if curl -fsS $(APP_URL)/health >/dev/null 2>&1; then \
 			echo "Application is up at $(APP_URL)"; \
 			$(COMPOSE) ps; \
