@@ -1,6 +1,10 @@
-FROM node:22-alpine AS deps
+FROM node:22-slim AS deps
 
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -38,4 +42,3 @@ RUN chmod +x /app/scripts/start-app.sh
 EXPOSE 4000
 
 CMD ["/app/scripts/start-app.sh"]
-
