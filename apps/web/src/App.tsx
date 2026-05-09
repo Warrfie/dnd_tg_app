@@ -1,16 +1,13 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { TableCard } from "./components/TableCard";
 import {
   type BookingRecord,
   type CreateBookingPayload,
-  type TableCurrentState,
   type TableRecord,
   cancelBooking,
   createBooking,
   fetchBooking,
   fetchBookings,
-  fetchTableStates,
   fetchTables,
   joinBooking,
   leaveBooking,
@@ -109,7 +106,6 @@ function getDayOccupancy(date: Date, bookings: BookingRecord[]) {
 
 function useClubData() {
   const [tables, setTables] = useState<TableRecord[]>([]);
-  const [currentStates, setCurrentStates] = useState<TableCurrentState[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,13 +119,11 @@ function useClubData() {
     until.setDate(until.getDate() + 60);
 
     try {
-      const [tablesData, currentData, bookingsData] = await Promise.all([
+      const [tablesData, bookingsData] = await Promise.all([
         fetchTables(),
-        fetchTableStates(),
         fetchBookings(today.toISOString(), until.toISOString())
       ]);
       setTables(tablesData);
-      setCurrentStates(currentData);
       setBookings(bookingsData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить данные");
@@ -142,7 +136,7 @@ function useClubData() {
     void loadData();
   }, []);
 
-  return { tables, currentStates, bookings, loading, error, reload: loadData, setBookings };
+  return { tables, bookings, loading, error, reload: loadData, setBookings };
 }
 
 function Layout({ children, loading, error }: { children: ReactNode; loading: boolean; error: string | null }) {
@@ -157,11 +151,9 @@ function Layout({ children, loading, error }: { children: ReactNode; loading: bo
 
 function HomeScreen({
   tables,
-  currentStates,
   bookings
 }: {
   tables: TableRecord[];
-  currentStates: TableCurrentState[];
   bookings: BookingRecord[];
 }) {
   const navigate = useNavigate();
@@ -174,8 +166,6 @@ function HomeScreen({
     () => [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 1)],
     [now],
   );
-
-  const currentByTable = new Map(currentStates.map((state) => [state.tableId, state]));
   const dayBookings = bookings
     .filter((booking) => booking.status === "active" && isSameDay(new Date(booking.startAt), selectedDate))
     .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
@@ -184,33 +174,6 @@ function HomeScreen({
 
   return (
     <>
-      <section className="section-grid">
-        {tables.map((table) => {
-          const state = currentByTable.get(table.id);
-          return (
-            <TableCard
-              key={table.id}
-              id={table.id}
-              name={table.name}
-              status={state?.status === "busy" ? "busy" : "free"}
-              isSelected={false}
-              currentBooking={
-                state?.status === "busy" && state.gameTitle && state.organizer
-                  ? {
-                      organizer: state.organizer,
-                      gameTitle: state.gameTitle,
-                      timeRange: `Сегодня ${shortTime.format(new Date(state.startAt!))}-${shortTime.format(new Date(state.endAt!))}`,
-                      participants: state.participantsCount ?? 0,
-                      privacyLabel: state.isPrivate ? "Приватная игра" : "Можно присоединиться"
-                    }
-                  : undefined
-              }
-              onSelect={() => navigate(`/day/${toDateInputValue(selectedDate)}`)}
-            />
-          );
-        })}
-      </section>
-
       <section className="panel">
         <div className="panel__header">
           <div>
@@ -604,7 +567,7 @@ export function App() {
   const telegramUser = getTelegramUser();
   const currentUserName = telegramUser?.first_name ?? "Саша";
   const currentUserId = telegramUser?.id ? String(telegramUser.id) : null;
-  const { tables, currentStates, bookings, loading, error, reload, setBookings } = useClubData();
+  const { tables, bookings, loading, error, reload, setBookings } = useClubData();
 
   function upsertBooking(booking: BookingRecord) {
     setBookings((current) => {
@@ -622,8 +585,8 @@ export function App() {
   return (
     <Layout loading={loading} error={error}>
       <Routes>
-        <Route path="/" element={<HomeScreen tables={tables} currentStates={currentStates} bookings={bookings} />} />
-        <Route path="/day/:date" element={<HomeScreen tables={tables} currentStates={currentStates} bookings={bookings} />} />
+        <Route path="/" element={<HomeScreen tables={tables} bookings={bookings} />} />
+        <Route path="/day/:date" element={<HomeScreen tables={tables} bookings={bookings} />} />
         <Route path="/booking/new" element={<BookingForm mode="create" onSaved={upsertBooking} />} />
         <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserId={currentUserId} currentUserName={currentUserName} onSaved={upsertBooking} />} />
         <Route path="/booking/:bookingId" element={<BookingViewScreen currentUserId={currentUserId} currentUserName={currentUserName} onChanged={(booking, removedId) => {

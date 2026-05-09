@@ -25,26 +25,18 @@ export function TableCard({ id, name, status, isSelected, currentBooking, onSele
       <div className="table-card__header">
         <div>
           <p className="eyebrow">{name}</p>
-          <h2>{status === "busy" ? "Занят сейчас" : "Свободен сейчас"}</h2>
+          <h2>{status === "busy" ? "Занят" : "Свободен"}</h2>
         </div>
-        <span className={`status-pill status-pill--${status}`}>
-          {status === "busy" ? "Live" : "Open"}
-        </span>
+        <span className={`status-pill status-pill--${status}`}>{status === "busy" ? "Занят" : "Свободен"}</span>
       </div>
 
       {currentBooking ? (
         <div className="table-card__content">
           <strong>{currentBooking.gameTitle}</strong>
           <p>{currentBooking.timeRange}</p>
-          <p>Организатор: {currentBooking.organizer}</p>
-          <p>{currentBooking.participants} участников</p>
-          <p>{currentBooking.privacyLabel}</p>
+          <p>{`${currentBooking.organizer} · ${currentBooking.privacyLabel}`}</p>
         </div>
-      ) : (
-        <div className="table-card__content">
-          <p>Сейчас стол свободен. Нажмите, чтобы посмотреть расписание и занять слот.</p>
-        </div>
-      )}
+      ) : null}
     </button>
   );
 }
