@@ -29,10 +29,19 @@ export type BookingRecord = {
   gameTitle: string;
   description: string;
   organizer: string;
+  organizerUsername: string | null;
   createdBy: string;
   createdByTelegramUserId: string | null;
-  participants: string[];
+  participants: Array<{
+    memberId: number;
+    telegramUserId: string | null;
+    name: string;
+    username: string | null;
+    role: string;
+  }>;
   participantsCount: number;
+  joinedCount: number;
+  availableSlots: number;
   isPrivate: boolean;
   openToJoin: boolean;
   startAt: string;
@@ -139,5 +148,17 @@ export function cancelBooking(id: number) {
 export function joinBooking(id: number) {
   return apiRequest<BookingRecord>(`/bookings/${id}/join`, {
     method: "POST"
+  });
+}
+
+export function leaveBooking(id: number) {
+  return apiRequest<BookingRecord>(`/bookings/${id}/leave`, {
+    method: "POST"
+  });
+}
+
+export function removeBookingParticipant(id: number, memberId: number) {
+  return apiRequest<BookingRecord>(`/bookings/${id}/participants/${memberId}`, {
+    method: "DELETE"
   });
 }

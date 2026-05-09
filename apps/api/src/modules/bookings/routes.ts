@@ -17,6 +17,10 @@ const bookingSchema = z.object({
 });
 
 const bookingParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const bookingParticipantParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  memberId: z.coerce.number().int().positive()
+});
 
 async function findBookingWithRelations(id: number) {
   return prisma.booking.findUnique({
@@ -273,6 +277,92 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
     const updated = await findBookingWithRelations(params.id);
     if (!updated) {
       return reply.status(500).send({ ok: false, error: "Booking disappeared after join" });
+    }
+
+    return serializeBooking(updated);
+  });
+
+  app.post("/:id/leave", async (request, reply) => {
+    const member = await requireTelegramMember(request, reply);
+    if (!member) {
+      return;
+    }
+
+    const params = bookingParamsSchema.parse(request.params);
+    const booking = await findBookingWithRelations(params.id);
+
+    if (!booking) {
+      return reply.status(404).send({ ok: false, error: "Booking not found" });
+    }
+
+    if (booking.status !== "active") {
+      return reply.status(400).send({ ok: false, error: "Из неактивной брони нельзя выйти" });
+    }
+
+    if (booking.createdByMemberId === member.id) {
+      return reply.status(400).send({ ok: false, error: "Организатор не может выйти из своей брони" });
+    }
+
+    const participant = booking.participants.find((item) => item.memberId === member.id);
+    if (!participant) {
+      return reply.status(400).send({ ok: false, error: "Вы не участвуете в этой игре" });
+    }
+
+    await prisma.bookingParticipant.delete({
+      where: {
+        bookingId_memberId: {
+          bookingId: booking.id,
+          memberId: member.id
+        }
+      }
+    });
+
+    const updated = await findBookingWithRelations(params.id);
+    if (!updated) {
+      return reply.status(500).send({ ok: false, error: "Booking disappeared after leave" });
+    }
+
+    return serializeBooking(updated);
+  });
+
+  app.delete("/:id/participants/:memberId", async (request, reply) => {
+    const currentMember = await requireTelegramMember(request, reply);
+    if (!currentMember) {
+      return;
+    }
+
+    const params = bookingParticipantParamsSchema.parse(request.params);
+    const booking = await findBookingWithRelations(params.id);
+
+    if (!booking) {
+      return reply.status(404).send({ ok: false, error: "Booking not found" });
+    }
+
+    if (booking.createdByMember.telegramUserId?.toString() !== currentMember.telegramUserId?.toString()) {
+      return reply.status(403).send({ ok: false, error: "Изменять состав может только организатор" });
+    }
+
+    if (booking.createdByMemberId === params.memberId) {
+      return reply.status(400).send({ ok: false, error: "Нельзя удалить организатора из брони" });
+    }
+
+    const participant = booking.participants.find((item) => item.memberId === params.memberId);
+    if (!participant) {
+      return reply.status(404).send({ ok: false, error: "Участник не найден в этой брони" });
+    }
+
+    await prisma.bookingParticipant.delete({
+      where: {
+        bookingId_memberId: {
+          bookingId: booking.id,
+          memberId: params.memberId
+        }
+      }
+    });
+
+    const updated = await findBookingWithRelations(params.id);
+    if (!updated) {
+      return reply.status(500).send({ ok: false, error: "Booking disappeared after participant removal" });
     }
 
     return serializeBooking(updated);

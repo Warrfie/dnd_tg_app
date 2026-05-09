@@ -13,6 +13,8 @@ import {
   fetchTableStates,
   fetchTables,
   joinBooking,
+  leaveBooking,
+  removeBookingParticipant,
   updateBooking
 } from "./lib/api";
 import { getTelegramUser } from "./lib/telegram";
@@ -48,10 +50,24 @@ function bookingAudienceLabel(booking: Pick<BookingRecord, "isPrivate">) {
   return booking.isPrivate ? "Частная" : "Открытая";
 }
 
-function bookingJoinButtonLabel(booking: Pick<BookingRecord, "isPrivate" | "participants" | "participantsCount">, working: boolean) {
+function bookingStatusLabel(status: string) {
+  if (status === "cancelled") return "Отменена";
+  if (status === "completed") return "Завершена";
+  return "Активна";
+}
+
+function formatMemberLabel(name: string, username?: string | null) {
+  return username ? `${name} @${username}` : name;
+}
+
+function canJoinBooking(booking: Pick<BookingRecord, "status" | "isPrivate" | "openToJoin" | "availableSlots">) {
+  return booking.status === "active" && !booking.isPrivate && booking.openToJoin && booking.availableSlots > 0;
+}
+
+function bookingJoinButtonLabel(booking: Pick<BookingRecord, "isPrivate" | "availableSlots">, working: boolean) {
   if (working) return "Присоединяюсь…";
   if (booking.isPrivate) return "Приватная игра";
-  if (booking.participants.length >= booking.participantsCount) return "Мест нет";
+  if (booking.availableSlots <= 0) return "Мест нет";
   return "Присоединиться к игре";
 }
 
@@ -223,7 +239,7 @@ function HomeScreen({
                 <strong>{booking.gameTitle}</strong>
                 <span>{booking.tableName}</span>
                 <span className={booking.isPrivate ? "audience-label audience-label--private" : "audience-label audience-label--open"}>
-                  {`${bookingAudienceLabel(booking)} · ${booking.participants.length}/${booking.participantsCount} человек`}
+                  {`${bookingAudienceLabel(booking)} · ${booking.joinedCount}/${booking.participantsCount} мест`}
                 </span>
               </div>
             </button>
@@ -329,8 +345,8 @@ function DayScreen({ tables, bookings }: { tables: TableRecord[]; bookings: Book
                       </span>
                     </div>
                     <h3>{booking.gameTitle}</h3>
-                    <p>{booking.organizer}</p>
-                    <p>{`${booking.participants.length}/${booking.participantsCount} человек`}</p>
+                    <p>{formatMemberLabel(booking.organizer, booking.organizerUsername)}</p>
+                    <p>{`${booking.joinedCount}/${booking.participantsCount} мест`}</p>
                   </button>
                 )) : <div className="empty-state">На этот день броней нет. Можно создать новую бронь для этого стола.</div>}
               </div>
@@ -492,7 +508,7 @@ function BookingViewScreen({
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [working, setWorking] = useState<"join" | "cancel" | null>(null);
+  const [working, setWorking] = useState<"join" | "cancel" | "leave" | `remove:${number}` | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -509,6 +525,11 @@ function BookingViewScreen({
   const canEdit =
     currentBooking.createdByTelegramUserId === currentUserId
     || (currentBooking.createdByTelegramUserId == null && currentBooking.createdBy === currentUserName);
+  const currentParticipant = currentUserId
+    ? currentBooking.participants.find((participant) => participant.telegramUserId === currentUserId)
+    : null;
+  const canJoin = !canEdit && !currentParticipant && canJoinBooking(currentBooking);
+  const canLeave = !canEdit && Boolean(currentParticipant) && currentBooking.status === "active";
 
   async function handleJoin() {
     setWorking("join");
@@ -524,6 +545,20 @@ function BookingViewScreen({
     }
   }
 
+  async function handleLeave() {
+    setWorking("leave");
+    setActionError(null);
+    try {
+      const updated = await leaveBooking(currentBooking.id);
+      setBooking(updated);
+      onChanged(updated);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Не удалось выйти из игры");
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleCancel() {
     setWorking("cancel");
     setActionError(null);
@@ -533,6 +568,20 @@ function BookingViewScreen({
       navigate(`/day/${toDateInputValue(new Date(currentBooking.startAt))}`);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Не удалось отменить бронь");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleRemoveParticipant(memberId: number) {
+    setWorking(`remove:${memberId}`);
+    setActionError(null);
+    try {
+      const updated = await removeBookingParticipant(currentBooking.id, memberId);
+      setBooking(updated);
+      onChanged(updated);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Не удалось обновить состав");
     } finally {
       setWorking(null);
     }
@@ -554,28 +603,47 @@ function BookingViewScreen({
           {actionError ? <div className="error-banner">{actionError}</div> : null}
           <div className="detail-row"><span>Стол</span><strong>{booking.tableName}</strong></div>
           <div className="detail-row"><span>Когда</span><strong>{fullDate.format(new Date(booking.startAt))}, {formatTimeRange(booking)}</strong></div>
-          <div className="detail-row"><span>Организатор</span><strong>{booking.organizer}</strong></div>
-          <div className="detail-row"><span>Статус</span><strong>{bookingJoinLabel(booking)}</strong></div>
-          <div className="detail-row"><span>Присоединились</span><strong>{`${booking.participants.length}/${booking.participantsCount}`}</strong></div>
+          <div className="detail-row"><span>Организатор</span><strong>{formatMemberLabel(booking.organizer, booking.organizerUsername)}</strong></div>
+          <div className="detail-row"><span>Статус брони</span><strong>{bookingStatusLabel(booking.status)}</strong></div>
+          <div className="detail-row"><span>Формат игры</span><strong>{bookingJoinLabel(booking)}</strong></div>
+          <div className="detail-row"><span>Места</span><strong>{`${booking.joinedCount}/${booking.participantsCount} занято · ${booking.availableSlots} свободно`}</strong></div>
           <p className="booking-detail__description">{booking.description}</p>
           <div className="participants">
             {booking.participants.length > 0 ? booking.participants.map((participant) => (
-              <span key={participant} className="participant-chip">{participant}</span>
+              <div key={participant.memberId} className="participant-row">
+                <span className="participant-chip">{formatMemberLabel(participant.name, participant.username)}</span>
+                {canEdit && booking.status === "active" ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={working === `remove:${participant.memberId}`}
+                    onClick={() => void handleRemoveParticipant(participant.memberId)}
+                  >
+                    {working === `remove:${participant.memberId}` ? "Убираю…" : "Убрать"}
+                  </button>
+                ) : null}
+              </div>
             )) : <span className="participant-chip">Пока никто не присоединился</span>}
           </div>
           <div className="actions-row">
             {canEdit ? (
               <>
                 <button type="button" className="primary-button" onClick={() => navigate(`/booking/${booking.id}/edit`)}>Редактировать бронь</button>
-                <button type="button" className="ghost-button" disabled={working === "cancel"} onClick={() => void handleCancel()}>
+                <button type="button" className="ghost-button" disabled={booking.status !== "active" || working === "cancel"} onClick={() => void handleCancel()}>
                   {working === "cancel" ? "Отменяю…" : "Отменить бронь"}
                 </button>
               </>
-            ) : (
-              <button type="button" className="primary-button" disabled={booking.isPrivate || booking.participants.length >= booking.participantsCount || working === "join"} onClick={() => void handleJoin()}>
+            ) : null}
+            {canJoin ? (
+              <button type="button" className="primary-button" disabled={working === "join"} onClick={() => void handleJoin()}>
                 {bookingJoinButtonLabel(booking, working === "join")}
               </button>
-            )}
+            ) : null}
+            {canLeave ? (
+              <button type="button" className="ghost-button" disabled={working === "leave"} onClick={() => void handleLeave()}>
+                {working === "leave" ? "Выхожу…" : "Выйти из игры"}
+              </button>
+            ) : null}
           </div>
         </section>
       </section>

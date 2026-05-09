@@ -60,7 +60,10 @@ test("creates a booking with organizer only and public join enabled", async () =
   assert.equal(body.gameTitle, "D&D Test");
   assert.equal(body.createdBy, "Саша");
   assert.equal(body.createdByTelegramUserId, "101");
+  assert.equal(body.organizerUsername, "sasha");
   assert.deepEqual(body.participants, []);
+  assert.equal(body.joinedCount, 0);
+  assert.equal(body.availableSlots, 4);
   assert.equal(body.openToJoin, true);
   assert.equal(body.isPrivate, false);
 
@@ -159,7 +162,17 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
 
   assert.equal(joinResponse.statusCode, 200);
   const joined = joinResponse.json();
-  assert.deepEqual(joined.participants, ["Артем"]);
+  assert.equal(joined.joinedCount, 1);
+  assert.equal(joined.availableSlots, 1);
+  assert.deepEqual(joined.participants, [
+    {
+      memberId: joined.participants[0].memberId,
+      telegramUserId: "303",
+      name: "Артем",
+      username: "artem",
+      role: "player"
+    }
+  ]);
 
   const duplicateJoin = await app.inject({
     method: "POST",
@@ -209,6 +222,64 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   });
 
   assert.equal(blockedJoin.statusCode, 400);
+
+  await app.close();
+});
+
+test("allows a joined player to leave and organizer to remove participant", async () => {
+  const app = buildServer();
+
+  const created = await app.inject({
+    method: "POST",
+    url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
+    payload: {
+      tableId: 2,
+      date: futureDate(10),
+      startTime: "14:00",
+      endTime: "18:00",
+      gameTitle: "Roster Test",
+      description: "Manage roster",
+      participantsCount: 3,
+      isPrivate: false
+    }
+  });
+  const booking = created.json();
+
+  const joined = await app.inject({
+    method: "POST",
+    url: `/api/bookings/${booking.id}/join`,
+    headers: telegramHeaders({ id: 303, first_name: "Артем", username: "artem" })
+  });
+  assert.equal(joined.statusCode, 200);
+
+  const afterLeave = await app.inject({
+    method: "POST",
+    url: `/api/bookings/${booking.id}/leave`,
+    headers: telegramHeaders({ id: 303, first_name: "Артем", username: "artem" })
+  });
+  assert.equal(afterLeave.statusCode, 200);
+  assert.equal(afterLeave.json().joinedCount, 0);
+
+  await app.inject({
+    method: "POST",
+    url: `/api/bookings/${booking.id}/join`,
+    headers: telegramHeaders({ id: 404, first_name: "Ника", username: "nika" })
+  });
+
+  const withParticipant = await app.inject({
+    method: "GET",
+    url: `/api/bookings/${booking.id}`
+  });
+  const participantId = withParticipant.json().participants[0].memberId;
+
+  const removed = await app.inject({
+    method: "DELETE",
+    url: `/api/bookings/${booking.id}/participants/${participantId}`,
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" })
+  });
+  assert.equal(removed.statusCode, 200);
+  assert.equal(removed.json().joinedCount, 0);
 
   await app.close();
 });
