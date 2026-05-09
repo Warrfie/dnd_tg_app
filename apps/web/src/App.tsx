@@ -24,6 +24,17 @@ const fullDate = new Intl.DateTimeFormat("ru-RU", {
   month: "long",
   weekday: "long"
 });
+const bookingTimeSlots = Array.from({ length: 32 }, (_, index) => {
+  const totalMinutes = (8 * 60) + index * 30;
+  const hours = `${Math.floor(totalMinutes / 60)}`.padStart(2, "0");
+  const minutes = `${totalMinutes % 60}`.padStart(2, "0");
+  return `${hours}:${minutes}`;
+});
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
 
 function startOfDay(value: Date) {
   const date = new Date(value);
@@ -273,26 +284,69 @@ function HomeScreen({
 function BookingForm({
   mode,
   initialBooking,
+  bookings,
   onSaved
 }: {
   mode: "create" | "edit";
   initialBooking?: BookingRecord;
+  bookings: BookingRecord[];
   onSaved: (booking: BookingRecord) => void;
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tableId = initialBooking?.tableId ?? Number(searchParams.get("tableId") ?? "1");
   const date = initialBooking ? toDateInputValue(new Date(initialBooking.startAt)) : searchParams.get("date") ?? toDateInputValue(new Date());
+  const initialStartTime = initialBooking ? shortTime.format(new Date(initialBooking.startAt)) : "19:00";
+  const initialEndTime = initialBooking ? shortTime.format(new Date(initialBooking.endAt)) : "22:00";
   const [form, setForm] = useState({
     gameTitle: initialBooking?.gameTitle ?? "Новая игра",
-    startTime: initialBooking ? shortTime.format(new Date(initialBooking.startAt)) : "19:00",
-    endTime: initialBooking ? shortTime.format(new Date(initialBooking.endAt)) : "22:00",
+    startTime: initialStartTime,
+    endTime: initialEndTime,
     participantsCount: String(initialBooking?.participantsCount ?? 4),
     isPrivate: initialBooking?.isPrivate ?? false,
     description: initialBooking?.description ?? "Описание партии или сессии DnD."
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const startSlotIndex = Math.max(bookingTimeSlots.indexOf(form.startTime), 0);
+  const endSlotOptions = bookingTimeSlots.slice(startSlotIndex + 1);
+  const dayTableBookings = bookings
+    .filter((booking) =>
+      booking.status === "active"
+      && booking.tableId === tableId
+      && booking.id !== initialBooking?.id
+      && isSameDay(new Date(booking.startAt), new Date(`${date}T00:00:00`))
+    )
+    .map((booking) => ({
+      startMinutes: new Date(booking.startAt).getHours() * 60 + new Date(booking.startAt).getMinutes(),
+      endMinutes: new Date(booking.endAt).getHours() * 60 + new Date(booking.endAt).getMinutes()
+    }));
+  const startSlotStates = bookingTimeSlots.slice(0, -1).map((slot) => {
+    const startMinutes = timeToMinutes(slot);
+    const nextSlotMinutes = startMinutes + 30;
+    const blocked = dayTableBookings.some((booking) => startMinutes < booking.endMinutes && nextSlotMinutes > booking.startMinutes);
+    return { slot, blocked };
+  });
+  const endSlotStates = endSlotOptions.map((slot) => {
+    const startMinutes = timeToMinutes(form.startTime);
+    const endMinutes = timeToMinutes(slot);
+    const blocked = dayTableBookings.some((booking) => startMinutes < booking.endMinutes && endMinutes > booking.startMinutes);
+    return { slot, blocked };
+  });
+
+  useEffect(() => {
+    const nextAvailableEnd = endSlotStates.find((slot) => !slot.blocked)?.slot;
+    if (!nextAvailableEnd) {
+      return;
+    }
+
+    if (!endSlotOptions.includes(form.endTime) || endSlotStates.find((slot) => slot.slot === form.endTime)?.blocked) {
+      setForm((current) => ({
+        ...current,
+        endTime: nextAvailableEnd
+      }));
+    }
+  }, [endSlotOptions, endSlotStates, form.endTime]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -345,11 +399,35 @@ function BookingForm({
             </label>
             <label className="field">
               <span>Время начала</span>
-              <input value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} />
+              <div className="slot-list" role="listbox" aria-label="Время начала">
+                {startSlotStates.map(({ slot, blocked }) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    className={`slot-button ${form.startTime === slot ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
+                    disabled={blocked}
+                    onClick={() => setForm({ ...form, startTime: slot })}
+                  >
+                    {slot}
+                  </button>
+                ))}
+              </div>
             </label>
             <label className="field">
               <span>Время конца</span>
-              <input value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} />
+              <div className="slot-list" role="listbox" aria-label="Время конца">
+                {endSlotStates.map(({ slot, blocked }) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    className={`slot-button ${form.endTime === slot ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
+                    disabled={blocked}
+                    onClick={() => setForm({ ...form, endTime: slot })}
+                  >
+                    {slot}
+                  </button>
+                ))}
+              </div>
             </label>
             <label className="field">
               <span>Сколько мест в игре</span>
@@ -384,10 +462,12 @@ function BookingForm({
 function BookingEditScreen({
   currentUserId,
   currentUserName,
+  bookings,
   onSaved
 }: {
   currentUserId: string | null;
   currentUserName: string;
+  bookings: BookingRecord[];
   onSaved: (booking: BookingRecord) => void;
 }) {
   const { bookingId } = useParams();
@@ -403,7 +483,7 @@ function BookingEditScreen({
     return <Navigate to={`/booking/${booking.id}`} replace />;
   }
 
-  return <BookingForm mode="edit" initialBooking={booking} onSaved={onSaved} />;
+  return <BookingForm mode="edit" initialBooking={booking} bookings={bookings} onSaved={onSaved} />;
 }
 
 function BookingViewScreen({
@@ -587,8 +667,8 @@ export function App() {
       <Routes>
         <Route path="/" element={<HomeScreen tables={tables} bookings={bookings} />} />
         <Route path="/day/:date" element={<HomeScreen tables={tables} bookings={bookings} />} />
-        <Route path="/booking/new" element={<BookingForm mode="create" onSaved={upsertBooking} />} />
-        <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserId={currentUserId} currentUserName={currentUserName} onSaved={upsertBooking} />} />
+        <Route path="/booking/new" element={<BookingForm mode="create" bookings={bookings} onSaved={upsertBooking} />} />
+        <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserId={currentUserId} currentUserName={currentUserName} bookings={bookings} onSaved={upsertBooking} />} />
         <Route path="/booking/:bookingId" element={<BookingViewScreen currentUserId={currentUserId} currentUserName={currentUserName} onChanged={(booking, removedId) => {
           if (removedId) removeBooking(removedId);
           if (booking) upsertBooking(booking);
