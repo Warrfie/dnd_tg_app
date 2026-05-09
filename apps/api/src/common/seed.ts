@@ -71,7 +71,7 @@ export async function ensureSeedData() {
       gameTitle: "Warhammer 40k",
       description: "Матч на 1500 очков. Можно прийти посмотреть и обсудить листы.",
       participants: ["Макс", "Артем"],
-      participantsCount: 2,
+      participantsCount: 3,
       isPrivate: false,
       openToJoin: true,
       startAt: atLocalDate(now, 2, 13, 0),
@@ -134,4 +134,3 @@ export async function ensureSeedData() {
     });
   }
 }
-

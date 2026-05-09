@@ -48,6 +48,13 @@ function bookingAudienceLabel(booking: Pick<BookingRecord, "isPrivate">) {
   return booking.isPrivate ? "Частная" : "Открытая";
 }
 
+function bookingJoinButtonLabel(booking: Pick<BookingRecord, "isPrivate" | "participants" | "participantsCount">, working: boolean) {
+  if (working) return "Присоединяюсь…";
+  if (booking.isPrivate) return "Приватная игра";
+  if (booking.participants.length >= booking.participantsCount) return "Мест нет";
+  return "Присоединиться к игре";
+}
+
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -566,7 +573,7 @@ function BookingViewScreen({
               </>
             ) : (
               <button type="button" className="primary-button" disabled={booking.isPrivate || booking.participants.length >= booking.participantsCount || working === "join"} onClick={() => void handleJoin()}>
-                {working === "join" ? "Присоединяюсь…" : booking.isPrivate ? "Приватная игра" : "Присоединиться к игре"}
+                {bookingJoinButtonLabel(booking, working === "join")}
               </button>
             )}
           </div>

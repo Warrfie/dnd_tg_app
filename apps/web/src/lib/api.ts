@@ -62,10 +62,17 @@ export type UpdateBookingPayload = CreateBookingPayload;
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const telegramInitData = getTelegramInitData();
+  const headers: Record<string, string> = {
+    ...(telegramInitData ? { "X-Telegram-Init-Data": telegramInitData } : {})
+  };
+
+  if (init?.body) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
-      "Content-Type": "application/json",
-      ...(telegramInitData ? { "X-Telegram-Init-Data": telegramInitData } : {}),
+      ...headers,
       ...(init?.headers ?? {})
     },
     ...init
