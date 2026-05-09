@@ -84,12 +84,44 @@ make status
 make logs
 make stop
 make down
+make nginx-install DOMAIN=lifusa.org
+make certbot DOMAIN=lifusa.org EMAIL=you@example.com
+make https DOMAIN=lifusa.org EMAIL=you@example.com
 ```
 
 The app is served from one container on one port:
 
 - app UI: `http://server:4000`
 - API: `http://server:4000/api`
+
+To expose it on standard web ports, the repository includes:
+
+- `infra/nginx/lifusa.org.conf.template`
+- `scripts/install-nginx-site.sh`
+- `make nginx-install`
+- `make certbot`
+- `make https`
+
+Typical server flow:
+
+```bash
+apt update && apt install -y nginx certbot python3-certbot-nginx
+make run
+make https DOMAIN=lifusa.org EMAIL=you@example.com
+```
+
+Then update your root `.env` to:
+
+```env
+TELEGRAM_BOT_TOKEN=replace_me
+WEB_ORIGIN=https://lifusa.org
+```
+
+and restart:
+
+```bash
+make run
+```
 
 ## Fast local start for this repository
 

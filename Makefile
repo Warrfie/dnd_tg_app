@@ -1,7 +1,9 @@
-.PHONY: run restart stop down status logs clean-ports
+.PHONY: run restart stop down status logs clean-ports nginx-install certbot https
 
 COMPOSE := docker compose
 APP_URL ?= http://127.0.0.1:4000
+DOMAIN ?=
+EMAIL ?=
 
 run: restart
 
@@ -34,6 +36,19 @@ status:
 logs:
 	$(COMPOSE) logs -f --tail=200
 
+nginx-install:
+	@test -n "$(DOMAIN)" || (echo "Usage: make nginx-install DOMAIN=lifusa.org"; exit 1)
+	@test -f /etc/nginx/nginx.conf || (echo "nginx is not installed"; exit 1)
+	./scripts/install-nginx-site.sh $(DOMAIN)
+
+certbot:
+	@test -n "$(DOMAIN)" || (echo "Usage: make certbot DOMAIN=lifusa.org EMAIL=you@example.com"; exit 1)
+	@test -n "$(EMAIL)" || (echo "Usage: make certbot DOMAIN=lifusa.org EMAIL=you@example.com"; exit 1)
+	certbot --nginx --non-interactive --agree-tos -m $(EMAIL) -d $(DOMAIN) --redirect
+
+https: nginx-install certbot
+	@echo "HTTPS setup finished for $(DOMAIN)"
+
 clean-ports:
 	@for port in 3000 4000; do \
 		pids=$$(lsof -ti tcp:$$port || true); \
@@ -42,4 +57,3 @@ clean-ports:
 			kill $$pids || true; \
 		fi; \
 	done
-

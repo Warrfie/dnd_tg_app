@@ -46,6 +46,9 @@ Useful commands:
 - `make logs` - follow logs
 - `make stop` - stop containers
 - `make down` - stop and remove containers
+- `make nginx-install DOMAIN=lifusa.org` - install nginx reverse proxy config
+- `make certbot DOMAIN=lifusa.org EMAIL=you@example.com` - issue HTTPS certificate
+- `make https DOMAIN=lifusa.org EMAIL=you@example.com` - nginx + certbot in one flow
 
 What is intentionally not stored in root `.env`:
 
@@ -54,3 +57,19 @@ What is intentionally not stored in root `.env`:
 - frontend API base URL
 
 Those values are provided by Docker Compose and app defaults.
+
+## HTTPS on a real server
+
+After `make run`, if your domain already points at the server:
+
+```bash
+apt update && apt install -y nginx certbot python3-certbot-nginx
+make nginx-install DOMAIN=lifusa.org
+make certbot DOMAIN=lifusa.org EMAIL=you@example.com
+```
+
+Or in one shot:
+
+```bash
+make https DOMAIN=lifusa.org EMAIL=you@example.com
+```
