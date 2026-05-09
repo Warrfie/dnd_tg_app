@@ -44,6 +44,30 @@ function isRangeBlocked(
   return bookings.some((booking) => rangeStartMinutes < booking.endMinutes && rangeEndMinutes > booking.startMinutes);
 }
 
+function isStartSlotAvailable(
+  slotMinutes: number,
+  isToday: boolean,
+  nowMinutes: number,
+  bookings: Array<{ startMinutes: number; endMinutes: number }>
+) {
+  if (isToday && slotMinutes < nowMinutes) return false;
+  return !isRangeBlocked(slotMinutes, slotMinutes + 30, bookings);
+}
+
+function canSelectRange(
+  leftMinutes: number,
+  rightMinutes: number,
+  isToday: boolean,
+  nowMinutes: number,
+  bookings: Array<{ startMinutes: number; endMinutes: number }>
+) {
+  const rangeStart = Math.min(leftMinutes, rightMinutes);
+  const rangeEnd = Math.max(leftMinutes, rightMinutes);
+  if (rangeEnd <= rangeStart) return false;
+  if (!isStartSlotAvailable(rangeStart, isToday, nowMinutes, bookings)) return false;
+  return !isRangeBlocked(rangeStart, rangeEnd, bookings);
+}
+
 function startOfDay(value: Date) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -304,8 +328,8 @@ function BookingForm({
   const [searchParams] = useSearchParams();
   const tableId = initialBooking?.tableId ?? Number(searchParams.get("tableId") ?? "1");
   const date = initialBooking ? toDateInputValue(new Date(initialBooking.startAt)) : searchParams.get("date") ?? toDateInputValue(new Date());
-  const initialStartTime = initialBooking ? shortTime.format(new Date(initialBooking.startAt)) : "19:00";
-  const initialEndTime = initialBooking ? shortTime.format(new Date(initialBooking.endAt)) : "22:00";
+  const initialStartTime = initialBooking ? shortTime.format(new Date(initialBooking.startAt)) : "";
+  const initialEndTime = initialBooking ? shortTime.format(new Date(initialBooking.endAt)) : "";
   const [form, setForm] = useState({
     gameTitle: initialBooking?.gameTitle ?? "Новая игра",
     startTime: initialStartTime,
@@ -330,66 +354,69 @@ function BookingForm({
       startMinutes: new Date(booking.startAt).getHours() * 60 + new Date(booking.startAt).getMinutes(),
       endMinutes: new Date(booking.endAt).getHours() * 60 + new Date(booking.endAt).getMinutes()
     }));
-  const startMinutes = timeToMinutes(form.startTime);
-  const endMinutes = timeToMinutes(form.endTime);
+  const hasPendingStart = Boolean(form.startTime) && !form.endTime;
+  const hasCompleteRange = Boolean(form.startTime) && Boolean(form.endTime);
+  const startMinutes = form.startTime ? timeToMinutes(form.startTime) : null;
+  const endMinutes = form.endTime ? timeToMinutes(form.endTime) : null;
   const slotStates = bookingTimeSlots.map((slot, index) => {
     const slotMinutes = timeToMinutes(slot);
     const isPastSlot = isToday && slotMinutes < nowMinutes;
-    const canStart = index < bookingTimeSlots.length - 1 && !isPastSlot && !isRangeBlocked(slotMinutes, slotMinutes + 30, dayTableBookings);
-    const canEnd = slotMinutes > startMinutes && !isRangeBlocked(startMinutes, slotMinutes, dayTableBookings);
-    const inSelectedRange = slotMinutes >= startMinutes && slotMinutes <= endMinutes;
+    const canStart = index < bookingTimeSlots.length - 1 && isStartSlotAvailable(slotMinutes, isToday, nowMinutes, dayTableBookings);
+    const canFinish =
+      hasPendingStart
+      && startMinutes !== null
+      && slotMinutes !== startMinutes
+      && canSelectRange(startMinutes, slotMinutes, isToday, nowMinutes, dayTableBookings);
+    const rangeStart = hasCompleteRange && startMinutes !== null && endMinutes !== null ? Math.min(startMinutes, endMinutes) : null;
+    const rangeEnd = hasCompleteRange && startMinutes !== null && endMinutes !== null ? Math.max(startMinutes, endMinutes) : null;
+    const inSelectedRange = rangeStart !== null && rangeEnd !== null && slotMinutes >= rangeStart && slotMinutes <= rangeEnd;
     return {
       slot,
       index,
       slotMinutes,
       canStart,
-      canEnd,
-      blocked: form.startTime ? (!canEnd && slotMinutes > startMinutes) || (slotMinutes <= startMinutes && !canStart && slot !== form.startTime) : !canStart,
+      canFinish,
+      blocked: !canStart,
+      isPastSlot,
+      isPendingStart: hasPendingStart && form.startTime === slot,
       inSelectedRange
     };
   });
 
-  useEffect(() => {
-    const currentStartState = slotStates.find((slot) => slot.slot === form.startTime);
-    if (currentStartState && !currentStartState.canStart) {
-      const nextStart = slotStates.find((slot) => slot.canStart)?.slot;
-      if (nextStart) {
-        setForm((current) => ({ ...current, startTime: nextStart }));
-      }
-      return;
-    }
-
-    const currentEndState = slotStates.find((slot) => slot.slot === form.endTime);
-    if (!currentEndState || !currentEndState.canEnd) {
-      const nextEnd = slotStates.find((slot) => slot.canEnd)?.slot;
-      if (nextEnd) {
-        setForm((current) => ({ ...current, endTime: nextEnd }));
-      }
-    }
-  }, [form.endTime, form.startTime, slotStates]);
-
   function handleSlotSelect(slot: string) {
     const slotMinutes = timeToMinutes(slot);
+    const slotState = slotStates.find((item) => item.slot === slot);
 
-    if (slotMinutes <= startMinutes || !slotStates.find((item) => item.slot === slot)?.canEnd) {
-      const startState = slotStates.find((item) => item.slot === slot);
-      if (startState?.canStart) {
-        const nextEnd = slotStates.find((item) => item.slotMinutes > slotMinutes && item.canEnd && item.slot !== slot)?.slot
-          ?? bookingTimeSlots[bookingTimeSlots.indexOf(slot) + 1]
-          ?? slot;
-        setForm((current) => ({
-          ...current,
-          startTime: slot,
-          endTime: nextEnd
-        }));
-      }
+    if (!hasPendingStart) {
+      if (!slotState?.canStart) return;
+      setForm((current) => ({
+        ...current,
+        startTime: slot,
+        endTime: ""
+      }));
       return;
     }
 
-    setForm((current) => ({
-      ...current,
-      endTime: slot
-    }));
+    if (startMinutes === null || slotMinutes === startMinutes) return;
+
+    if (canSelectRange(startMinutes, slotMinutes, isToday, nowMinutes, dayTableBookings)) {
+      const nextStart = Math.min(startMinutes, slotMinutes);
+      const nextEnd = Math.max(startMinutes, slotMinutes);
+      setForm((current) => ({
+        ...current,
+        startTime: bookingTimeSlots.find((item) => timeToMinutes(item) === nextStart) ?? current.startTime,
+        endTime: bookingTimeSlots.find((item) => timeToMinutes(item) === nextEnd) ?? current.endTime
+      }));
+      return;
+    }
+
+    if (slotState?.canStart) {
+      setForm((current) => ({
+        ...current,
+        startTime: slot,
+        endTime: ""
+      }));
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -442,14 +469,20 @@ function BookingForm({
               <input value={form.gameTitle} onChange={(event) => setForm({ ...form, gameTitle: event.target.value })} />
             </label>
             <label className="field field--wide">
-              <span>{`Тайм-слот: ${form.startTime}-${form.endTime}`}</span>
+              <span>
+                {hasCompleteRange
+                  ? `Тайм-слот: ${form.startTime}-${form.endTime}`
+                  : hasPendingStart
+                    ? `Тайм-слот: старт ${form.startTime}, выберите конец`
+                    : "Тайм-слот"}
+              </span>
               <div className="slot-list" role="listbox" aria-label="Тайм-слот">
-                {slotStates.map(({ slot, blocked, inSelectedRange }) => (
+                {slotStates.map(({ slot, blocked, canFinish, inSelectedRange, isPendingStart, isPastSlot }) => (
                   <button
                     key={slot}
                     type="button"
-                    className={`slot-button ${inSelectedRange ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
-                    disabled={blocked}
+                    className={`slot-button ${inSelectedRange ? "slot-button--selected" : ""} ${isPendingStart ? "slot-button--start-pending" : ""} ${blocked ? "slot-button--blocked" : ""} ${isPastSlot ? "slot-button--past" : ""} ${hasPendingStart && canFinish ? "slot-button--finishable" : ""}`}
+                    disabled={!hasPendingStart ? blocked : !(canFinish || !blocked || isPendingStart)}
                     onClick={() => handleSlotSelect(slot)}
                   >
                     {slot}
@@ -477,7 +510,7 @@ function BookingForm({
           </div>
 
           <div className="actions-row">
-            <button type="submit" className="primary-button" disabled={submitting}>
+            <button type="submit" className="primary-button" disabled={submitting || !hasCompleteRange}>
               {submitting ? "Сохраняю…" : mode === "create" ? "Создать бронь" : "Сохранить изменения"}
             </button>
           </div>

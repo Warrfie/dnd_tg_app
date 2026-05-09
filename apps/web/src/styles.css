@@ -496,11 +496,12 @@ h3,
 
 .slot-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 .slot-button {
+  position: relative;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 10px 12px;
@@ -515,11 +516,27 @@ h3,
   background: rgba(125, 211, 252, 0.14);
 }
 
+.slot-button--start-pending {
+  border-color: rgba(125, 211, 252, 0.5);
+  background:
+    linear-gradient(90deg, rgba(125, 211, 252, 0.2) 0 50%, rgba(255, 255, 255, 0.04) 50% 100%);
+}
+
+.slot-button--finishable {
+  border-color: rgba(125, 211, 252, 0.22);
+}
+
 .slot-button--blocked {
   border-color: rgba(248, 113, 113, 0.28);
   background: rgba(248, 113, 113, 0.16);
   color: #ffb3b3;
   cursor: not-allowed;
+}
+
+.slot-button--past {
+  border-color: rgba(173, 193, 216, 0.12);
+  background: rgba(173, 193, 216, 0.08);
+  color: rgba(173, 193, 216, 0.72);
 }
 
 .field--wide {
