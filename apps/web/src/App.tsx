@@ -177,7 +177,7 @@ function HomeScreen({
       <section className="panel">
         <div className="panel__header">
           <div>
-            <p className="eyebrow">День</p>
+            <p className="eyebrow">GG1 Настолки в Нячанге</p>
             <h2>{fullDate.format(selectedDate)}</h2>
           </div>
         </div>
@@ -326,7 +326,7 @@ function BookingForm({
     <>
       <header className="screen-header">
         <button type="button" className="ghost-button" onClick={() => navigate(`/day/${date}`)}>
-          Назад к дню
+          Назад
         </button>
         <div>
           <h1>{mode === "create" ? `Новая бронь · Стол ${tableId}` : `Редактирование · ${initialBooking?.gameTitle ?? ""}`}</h1>
@@ -503,7 +503,7 @@ function BookingViewScreen({
     <>
       <header className="screen-header">
         <button type="button" className="ghost-button" onClick={() => navigate(`/day/${toDateInputValue(new Date(booking.startAt))}`)}>
-          Назад к дню
+          Назад
         </button>
         <div>
           <h1>{booking.gameTitle}</h1>
