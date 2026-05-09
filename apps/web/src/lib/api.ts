@@ -1,3 +1,5 @@
+import { getTelegramInitData } from "./telegram";
+
 export const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:4000/api";
 
@@ -28,6 +30,7 @@ export type BookingRecord = {
   description: string;
   organizer: string;
   createdBy: string;
+  createdByTelegramUserId: string | null;
   participants: string[];
   participantsCount: number;
   isPrivate: boolean;
@@ -49,7 +52,6 @@ export type CreateBookingPayload = {
   date: string;
   startTime: string;
   endTime: string;
-  createdByName: string;
   gameTitle: string;
   description: string;
   participantsCount: number;
@@ -59,9 +61,11 @@ export type CreateBookingPayload = {
 export type UpdateBookingPayload = CreateBookingPayload;
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const telegramInitData = getTelegramInitData();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(telegramInitData ? { "X-Telegram-Init-Data": telegramInitData } : {}),
       ...(init?.headers ?? {})
     },
     ...init
@@ -119,16 +123,14 @@ export function updateBooking(id: number, payload: UpdateBookingPayload) {
   });
 }
 
-export function cancelBooking(id: number, createdByName: string) {
+export function cancelBooking(id: number) {
   return apiRequest<BookingRecord>(`/bookings/${id}/cancel`, {
-    method: "POST",
-    body: JSON.stringify({ createdByName })
+    method: "POST"
   });
 }
 
-export function joinBooking(id: number, memberName: string) {
+export function joinBooking(id: number) {
   return apiRequest<BookingRecord>(`/bookings/${id}/join`, {
-    method: "POST",
-    body: JSON.stringify({ memberName })
+    method: "POST"
   });
 }

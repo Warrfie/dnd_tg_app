@@ -4,11 +4,12 @@ import test from "node:test";
 process.env.TELEGRAM_BOT_TOKEN ??= "test-token";
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/dnd_tg_app";
 
-const [{ buildServer }, { prisma }, { ensureSeedData }, { resetDatabase, seedBaseData }] = await Promise.all([
+const [{ buildServer }, { prisma }, { ensureSeedData }, { resetDatabase, seedBaseData }, { telegramHeaders }] = await Promise.all([
   import("../../app.js"),
   import("../../common/prisma.js"),
   import("../../common/seed.js"),
-  import("../../test/test-helpers.js")
+  import("../../test/test-helpers.js"),
+  import("../../test/telegram-auth.js")
 ]);
 
 function futureDate(daysAhead: number) {
@@ -41,12 +42,12 @@ test("creates a booking with organizer only and public join enabled", async () =
   const response = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(7),
       startTime: "19:00",
       endTime: "22:00",
-      createdByName: "Саша",
       gameTitle: "D&D Test",
       description: "Тестовая бронь",
       participantsCount: 4,
@@ -58,6 +59,7 @@ test("creates a booking with organizer only and public join enabled", async () =
   const body = response.json();
   assert.equal(body.gameTitle, "D&D Test");
   assert.equal(body.createdBy, "Саша");
+  assert.equal(body.createdByTelegramUserId, "101");
   assert.deepEqual(body.participants, []);
   assert.equal(body.openToJoin, true);
   assert.equal(body.isPrivate, false);
@@ -71,12 +73,12 @@ test("updates a booking only for its creator", async () => {
   const created = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(8),
       startTime: "18:00",
       endTime: "21:00",
-      createdByName: "Саша",
       gameTitle: "Old Name",
       description: "Before edit",
       participantsCount: 5,
@@ -88,12 +90,12 @@ test("updates a booking only for its creator", async () => {
   const updated = await app.inject({
     method: "PATCH",
     url: `/api/bookings/${booking.id}`,
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(8),
       startTime: "19:00",
       endTime: "22:30",
-      createdByName: "Саша",
       gameTitle: "New Name",
       description: "After edit",
       participantsCount: 3,
@@ -111,12 +113,12 @@ test("updates a booking only for its creator", async () => {
   const forbidden = await app.inject({
     method: "PATCH",
     url: `/api/bookings/${booking.id}`,
+    headers: telegramHeaders({ id: 202, first_name: "Макс", username: "max" }),
     payload: {
       tableId: 1,
       date: futureDate(8),
       startTime: "19:00",
       endTime: "22:30",
-      createdByName: "Макс",
       gameTitle: "Hijack",
       description: "Nope",
       participantsCount: 3,
@@ -135,12 +137,12 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const publicBookingResponse = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 202, first_name: "Макс", username: "max" }),
     payload: {
       tableId: 2,
       date: futureDate(9),
       startTime: "12:00",
       endTime: "15:00",
-      createdByName: "Макс",
       gameTitle: "Public Game",
       description: "Joinable",
       participantsCount: 2,
@@ -152,7 +154,7 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const joinResponse = await app.inject({
     method: "POST",
     url: `/api/bookings/${publicBooking.id}/join`,
-    payload: { memberName: "Артем" }
+    headers: telegramHeaders({ id: 303, first_name: "Артем", username: "artem" })
   });
 
   assert.equal(joinResponse.statusCode, 200);
@@ -162,7 +164,7 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const duplicateJoin = await app.inject({
     method: "POST",
     url: `/api/bookings/${publicBooking.id}/join`,
-    payload: { memberName: "Артем" }
+    headers: telegramHeaders({ id: 303, first_name: "Артем", username: "artem" })
   });
 
   assert.equal(duplicateJoin.statusCode, 400);
@@ -170,7 +172,7 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const fullJoin = await app.inject({
     method: "POST",
     url: `/api/bookings/${publicBooking.id}/join`,
-    payload: { memberName: "Ника" }
+    headers: telegramHeaders({ id: 404, first_name: "Ника", username: "nika" })
   });
 
   assert.equal(fullJoin.statusCode, 200);
@@ -178,7 +180,7 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const overflowJoin = await app.inject({
     method: "POST",
     url: `/api/bookings/${publicBooking.id}/join`,
-    payload: { memberName: "Саша" }
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" })
   });
 
   assert.equal(overflowJoin.statusCode, 409);
@@ -186,12 +188,12 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const privateBookingResponse = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(10),
       startTime: "18:00",
       endTime: "22:00",
-      createdByName: "Саша",
       gameTitle: "Private Game",
       description: "No joins",
       participantsCount: 4,
@@ -203,7 +205,7 @@ test("joins a public booking and rejects duplicate joins and private joins", asy
   const blockedJoin = await app.inject({
     method: "POST",
     url: `/api/bookings/${privateBooking.id}/join`,
-    payload: { memberName: "Ника" }
+    headers: telegramHeaders({ id: 404, first_name: "Ника", username: "nika" })
   });
 
   assert.equal(blockedJoin.statusCode, 400);
@@ -217,12 +219,12 @@ test("cancels a booking only for its creator", async () => {
   const created = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(11),
       startTime: "10:00",
       endTime: "13:00",
-      createdByName: "Саша",
       gameTitle: "Cancelable",
       description: "Cancel me",
       participantsCount: 3,
@@ -234,14 +236,14 @@ test("cancels a booking only for its creator", async () => {
   const forbidden = await app.inject({
     method: "POST",
     url: `/api/bookings/${booking.id}/cancel`,
-    payload: { createdByName: "Макс" }
+    headers: telegramHeaders({ id: 202, first_name: "Макс", username: "max" })
   });
   assert.equal(forbidden.statusCode, 403);
 
   const cancelled = await app.inject({
     method: "POST",
     url: `/api/bookings/${booking.id}/cancel`,
-    payload: { createdByName: "Саша" }
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" })
   });
   assert.equal(cancelled.statusCode, 200);
   assert.equal(cancelled.json().status, "cancelled");
@@ -255,12 +257,12 @@ test("rejects overlapping bookings for the same table", async () => {
   const first = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 101, first_name: "Саша", username: "sasha" }),
     payload: {
       tableId: 1,
       date: futureDate(12),
       startTime: "18:00",
       endTime: "21:00",
-      createdByName: "Саша",
       gameTitle: "First",
       description: "First slot",
       participantsCount: 4,
@@ -272,12 +274,12 @@ test("rejects overlapping bookings for the same table", async () => {
   const overlap = await app.inject({
     method: "POST",
     url: "/api/bookings",
+    headers: telegramHeaders({ id: 202, first_name: "Макс", username: "max" }),
     payload: {
       tableId: 1,
       date: futureDate(12),
       startTime: "20:00",
       endTime: "22:00",
-      createdByName: "Макс",
       gameTitle: "Overlap",
       description: "Should fail",
       participantsCount: 2,

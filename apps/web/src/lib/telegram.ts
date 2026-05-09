@@ -32,3 +32,7 @@ export function getTelegramUser(): TelegramWebAppUser | undefined {
   return getTelegramWebApp()?.initDataUnsafe?.user;
 }
 
+export function getTelegramInitData(): string | undefined {
+  const initData = getTelegramWebApp()?.initData;
+  return initData && initData.length > 0 ? initData : undefined;
+}

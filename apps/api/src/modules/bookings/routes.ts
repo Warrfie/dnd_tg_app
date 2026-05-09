@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../common/prisma.js";
+import { requireTelegramMember } from "../auth/current-member.js";
 import { assertBookingRules } from "./validators.js";
 import { serializeBooking } from "./serializers.js";
 
@@ -9,7 +10,6 @@ const bookingSchema = z.object({
   date: z.string().min(1),
   startTime: z.string().min(1),
   endTime: z.string().min(1),
-  createdByName: z.string().min(1).max(80),
   gameTitle: z.string().min(1).max(120),
   description: z.string().max(4000).optional().default(""),
   participantsCount: z.number().int().min(1).max(20),
@@ -17,20 +17,6 @@ const bookingSchema = z.object({
 });
 
 const bookingParamsSchema = z.object({ id: z.coerce.number().int().positive() });
-
-async function getOrCreateMember(firstName: string) {
-  const name = firstName.trim();
-  const existing = await prisma.member.findFirst({ where: { firstName: name } });
-  if (existing) {
-    return existing;
-  }
-
-  return prisma.member.create({
-    data: {
-      firstName: name
-    }
-  });
-}
 
 async function findBookingWithRelations(id: number) {
   return prisma.booking.findUnique({
@@ -95,6 +81,11 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/", async (request, reply) => {
+    const creator = await requireTelegramMember(request, reply);
+    if (!creator) {
+      return;
+    }
+
     const payload = bookingSchema.parse(request.body);
     const startAt = new Date(`${payload.date}T${payload.startTime}:00`);
     const endAt = new Date(`${payload.date}T${payload.endTime}:00`);
@@ -128,8 +119,6 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const creator = await getOrCreateMember(payload.createdByName);
-
     const booking = await prisma.booking.create({
       data: {
         tableId: payload.tableId,
@@ -155,6 +144,11 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch("/:id", async (request, reply) => {
+    const currentMember = await requireTelegramMember(request, reply);
+    if (!currentMember) {
+      return;
+    }
+
     const params = bookingParamsSchema.parse(request.params);
     const payload = bookingSchema.parse(request.body);
     const booking = await findBookingWithRelations(params.id);
@@ -163,7 +157,7 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ ok: false, error: "Booking not found" });
     }
 
-    if (booking.createdByMember.firstName !== payload.createdByName.trim()) {
+    if (booking.createdByMember.telegramUserId?.toString() !== currentMember.telegramUserId?.toString()) {
       return reply.status(403).send({ ok: false, error: "Редактировать бронь может только создатель" });
     }
 
@@ -212,15 +206,19 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/:id/cancel", async (request, reply) => {
+    const currentMember = await requireTelegramMember(request, reply);
+    if (!currentMember) {
+      return;
+    }
+
     const params = bookingParamsSchema.parse(request.params);
-    const body = z.object({ createdByName: z.string().min(1).max(80) }).parse(request.body);
     const booking = await findBookingWithRelations(params.id);
 
     if (!booking) {
       return reply.status(404).send({ ok: false, error: "Booking not found" });
     }
 
-    if (booking.createdByMember.firstName !== body.createdByName.trim()) {
+    if (booking.createdByMember.telegramUserId?.toString() !== currentMember.telegramUserId?.toString()) {
       return reply.status(403).send({ ok: false, error: "Отменить бронь может только создатель" });
     }
 
@@ -234,8 +232,12 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/:id/join", async (request, reply) => {
+    const member = await requireTelegramMember(request, reply);
+    if (!member) {
+      return;
+    }
+
     const params = bookingParamsSchema.parse(request.params);
-    const body = z.object({ memberName: z.string().min(1).max(80) }).parse(request.body);
     const booking = await findBookingWithRelations(params.id);
 
     if (!booking) {
@@ -250,7 +252,6 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ ok: false, error: "К этой игре нельзя присоединиться" });
     }
 
-    const member = await getOrCreateMember(body.memberName);
     const alreadyJoined = booking.participants.find((participant) => participant.memberId === member.id);
     if (alreadyJoined) {
       return reply.status(400).send({ ok: false, error: "Вы уже присоединились к этой игре" });

@@ -337,12 +337,10 @@ function DayScreen({ tables, bookings }: { tables: TableRecord[]; bookings: Book
 
 function BookingForm({
   mode,
-  currentUserName,
   initialBooking,
   onSaved
 }: {
   mode: "create" | "edit";
-  currentUserName: string;
   initialBooking?: BookingRecord;
   onSaved: (booking: BookingRecord) => void;
 }) {
@@ -371,7 +369,6 @@ function BookingForm({
       date,
       startTime: form.startTime,
       endTime: form.endTime,
-      createdByName: currentUserName,
       gameTitle: form.gameTitle,
       description: form.description,
       participantsCount: Number(form.participantsCount),
@@ -450,9 +447,11 @@ function BookingForm({
 }
 
 function BookingEditScreen({
+  currentUserId,
   currentUserName,
   onSaved
 }: {
+  currentUserId: string | null;
   currentUserName: string;
   onSaved: (booking: BookingRecord) => void;
 }) {
@@ -465,15 +464,19 @@ function BookingEditScreen({
   }, [bookingId]);
 
   if (!booking) return <div className="loading-banner">Загружаю бронь…</div>;
-  if (booking.createdBy !== currentUserName) return <Navigate to={`/booking/${booking.id}`} replace />;
+  if ((booking.createdByTelegramUserId ?? null) !== currentUserId && !(booking.createdByTelegramUserId == null && booking.createdBy === currentUserName)) {
+    return <Navigate to={`/booking/${booking.id}`} replace />;
+  }
 
-  return <BookingForm mode="edit" currentUserName={currentUserName} initialBooking={booking} onSaved={onSaved} />;
+  return <BookingForm mode="edit" initialBooking={booking} onSaved={onSaved} />;
 }
 
 function BookingViewScreen({
+  currentUserId,
   currentUserName,
   onChanged
 }: {
+  currentUserId: string | null;
   currentUserName: string;
   onChanged: (booking: BookingRecord | null, removedId?: number) => void;
 }) {
@@ -496,13 +499,15 @@ function BookingViewScreen({
   if (!booking) return <Navigate to="/" replace />;
 
   const currentBooking = booking;
-  const canEdit = currentBooking.createdBy === currentUserName;
+  const canEdit =
+    currentBooking.createdByTelegramUserId === currentUserId
+    || (currentBooking.createdByTelegramUserId == null && currentBooking.createdBy === currentUserName);
 
   async function handleJoin() {
     setWorking("join");
     setActionError(null);
     try {
-      const updated = await joinBooking(currentBooking.id, currentUserName);
+      const updated = await joinBooking(currentBooking.id);
       setBooking(updated);
       onChanged(updated);
     } catch (error) {
@@ -516,7 +521,7 @@ function BookingViewScreen({
     setWorking("cancel");
     setActionError(null);
     try {
-      await cancelBooking(currentBooking.id, currentUserName);
+      await cancelBooking(currentBooking.id);
       onChanged(null, currentBooking.id);
       navigate(`/day/${toDateInputValue(new Date(currentBooking.startAt))}`);
     } catch (error) {
@@ -574,6 +579,7 @@ function BookingViewScreen({
 export function App() {
   const telegramUser = getTelegramUser();
   const currentUserName = telegramUser?.first_name ?? "Саша";
+  const currentUserId = telegramUser?.id ? String(telegramUser.id) : null;
   const { tables, currentStates, bookings, loading, error, reload, setBookings } = useClubData();
 
   function upsertBooking(booking: BookingRecord) {
@@ -594,9 +600,9 @@ export function App() {
       <Routes>
         <Route path="/" element={<HomeScreen currentUserName={currentUserName} tables={tables} currentStates={currentStates} bookings={bookings} />} />
         <Route path="/day/:date" element={<DayScreen tables={tables} bookings={bookings} />} />
-        <Route path="/booking/new" element={<BookingForm mode="create" currentUserName={currentUserName} onSaved={upsertBooking} />} />
-        <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserName={currentUserName} onSaved={upsertBooking} />} />
-        <Route path="/booking/:bookingId" element={<BookingViewScreen currentUserName={currentUserName} onChanged={(booking, removedId) => {
+        <Route path="/booking/new" element={<BookingForm mode="create" onSaved={upsertBooking} />} />
+        <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserId={currentUserId} currentUserName={currentUserName} onSaved={upsertBooking} />} />
+        <Route path="/booking/:bookingId" element={<BookingViewScreen currentUserId={currentUserId} currentUserName={currentUserName} onChanged={(booking, removedId) => {
           if (removedId) removeBooking(removedId);
           if (booking) upsertBooking(booking);
         }} />} />

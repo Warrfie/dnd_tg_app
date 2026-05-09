@@ -15,6 +15,7 @@ export function serializeBooking(booking: BookingWithRelations) {
     description: booking.description ?? "",
     organizer: booking.createdByMember.firstName,
     createdBy: booking.createdByMember.firstName,
+    createdByTelegramUserId: booking.createdByMember.telegramUserId?.toString() ?? null,
     participants: booking.participants
       .filter((participant) => participant.role !== "organizer")
       .map((participant) => participant.member.firstName),
