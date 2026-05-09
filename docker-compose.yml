@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: dnd_tg_app
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +33,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dnd_tg_app
       TEST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dnd_tg_app_test
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     healthcheck:
       test:
         [

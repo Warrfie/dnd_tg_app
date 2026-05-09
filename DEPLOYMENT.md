@@ -89,10 +89,10 @@ make certbot DOMAIN=lifusa.org EMAIL=you@example.com
 make https DOMAIN=lifusa.org EMAIL=you@example.com
 ```
 
-The app is served from one container on one port:
+The app is served from one container on one internal host port:
 
-- app UI: `http://server:4000`
-- API: `http://server:4000/api`
+- app UI via reverse proxy: `http://server` or `https://server`
+- API via reverse proxy: `/api`
 
 To expose it on standard web ports, the repository includes:
 
@@ -137,7 +137,8 @@ npm install
 docker compose up -d
 ```
 
-This uses [docker-compose.yml](/Users/warrfie/dnd_tg_app/docker-compose.yml) and starts Postgres on `localhost:5432`.
+This uses [docker-compose.yml](/Users/warrfie/dnd_tg_app/docker-compose.yml) and starts Postgres only inside the Docker network. It is not exposed publicly on the host.
+The app container is bound to `127.0.0.1:4000` only, so it is reachable locally on the server and through `nginx`, but not directly from the internet.
 
 ### 3. Create one minimal root env file
 
@@ -172,6 +173,12 @@ make run
 - backend health: `http://localhost:4000/health`
 
 This is enough to test the app in a browser before Telegram integration.
+
+## Security defaults in this repository
+
+- Postgres is internal-only in Docker and is not published on the host.
+- The app container is published on `127.0.0.1:4000` only.
+- Public traffic should enter through `nginx` on `80/443`.
 
 ## How to test inside Telegram locally
 

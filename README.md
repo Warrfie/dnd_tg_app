@@ -39,6 +39,8 @@ This target will:
 - seed default data;
 - start the app in detached mode with automatic restart policy.
 
+In Docker deployment, the app is bound to `127.0.0.1:4000` only. Public traffic should go through `nginx` on `80/443`.
+
 Useful commands:
 
 - `make run` - restart everything cleanly
