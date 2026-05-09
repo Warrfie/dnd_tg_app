@@ -36,6 +36,14 @@ function timeToMinutes(value: string) {
   return hours * 60 + minutes;
 }
 
+function isRangeBlocked(
+  rangeStartMinutes: number,
+  rangeEndMinutes: number,
+  bookings: Array<{ startMinutes: number; endMinutes: number }>
+) {
+  return bookings.some((booking) => rangeStartMinutes < booking.endMinutes && rangeEndMinutes > booking.startMinutes);
+}
+
 function startOfDay(value: Date) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -308,8 +316,9 @@ function BookingForm({
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const startSlotIndex = Math.max(bookingTimeSlots.indexOf(form.startTime), 0);
-  const endSlotOptions = bookingTimeSlots.slice(startSlotIndex + 1);
+  const now = new Date();
+  const isToday = isSameDay(new Date(`${date}T00:00:00`), now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const dayTableBookings = bookings
     .filter((booking) =>
       booking.status === "active"
@@ -321,32 +330,67 @@ function BookingForm({
       startMinutes: new Date(booking.startAt).getHours() * 60 + new Date(booking.startAt).getMinutes(),
       endMinutes: new Date(booking.endAt).getHours() * 60 + new Date(booking.endAt).getMinutes()
     }));
-  const startSlotStates = bookingTimeSlots.slice(0, -1).map((slot) => {
-    const startMinutes = timeToMinutes(slot);
-    const nextSlotMinutes = startMinutes + 30;
-    const blocked = dayTableBookings.some((booking) => startMinutes < booking.endMinutes && nextSlotMinutes > booking.startMinutes);
-    return { slot, blocked };
-  });
-  const endSlotStates = endSlotOptions.map((slot) => {
-    const startMinutes = timeToMinutes(form.startTime);
-    const endMinutes = timeToMinutes(slot);
-    const blocked = dayTableBookings.some((booking) => startMinutes < booking.endMinutes && endMinutes > booking.startMinutes);
-    return { slot, blocked };
+  const startMinutes = timeToMinutes(form.startTime);
+  const endMinutes = timeToMinutes(form.endTime);
+  const slotStates = bookingTimeSlots.map((slot, index) => {
+    const slotMinutes = timeToMinutes(slot);
+    const isPastSlot = isToday && slotMinutes < nowMinutes;
+    const canStart = index < bookingTimeSlots.length - 1 && !isPastSlot && !isRangeBlocked(slotMinutes, slotMinutes + 30, dayTableBookings);
+    const canEnd = slotMinutes > startMinutes && !isRangeBlocked(startMinutes, slotMinutes, dayTableBookings);
+    const inSelectedRange = slotMinutes >= startMinutes && slotMinutes <= endMinutes;
+    return {
+      slot,
+      index,
+      slotMinutes,
+      canStart,
+      canEnd,
+      blocked: form.startTime ? (!canEnd && slotMinutes > startMinutes) || (slotMinutes <= startMinutes && !canStart && slot !== form.startTime) : !canStart,
+      inSelectedRange
+    };
   });
 
   useEffect(() => {
-    const nextAvailableEnd = endSlotStates.find((slot) => !slot.blocked)?.slot;
-    if (!nextAvailableEnd) {
+    const currentStartState = slotStates.find((slot) => slot.slot === form.startTime);
+    if (currentStartState && !currentStartState.canStart) {
+      const nextStart = slotStates.find((slot) => slot.canStart)?.slot;
+      if (nextStart) {
+        setForm((current) => ({ ...current, startTime: nextStart }));
+      }
       return;
     }
 
-    if (!endSlotOptions.includes(form.endTime) || endSlotStates.find((slot) => slot.slot === form.endTime)?.blocked) {
-      setForm((current) => ({
-        ...current,
-        endTime: nextAvailableEnd
-      }));
+    const currentEndState = slotStates.find((slot) => slot.slot === form.endTime);
+    if (!currentEndState || !currentEndState.canEnd) {
+      const nextEnd = slotStates.find((slot) => slot.canEnd)?.slot;
+      if (nextEnd) {
+        setForm((current) => ({ ...current, endTime: nextEnd }));
+      }
     }
-  }, [endSlotOptions, endSlotStates, form.endTime]);
+  }, [form.endTime, form.startTime, slotStates]);
+
+  function handleSlotSelect(slot: string) {
+    const slotMinutes = timeToMinutes(slot);
+
+    if (slotMinutes <= startMinutes || !slotStates.find((item) => item.slot === slot)?.canEnd) {
+      const startState = slotStates.find((item) => item.slot === slot);
+      if (startState?.canStart) {
+        const nextEnd = slotStates.find((item) => item.slotMinutes > slotMinutes && item.canEnd && item.slot !== slot)?.slot
+          ?? bookingTimeSlots[bookingTimeSlots.indexOf(slot) + 1]
+          ?? slot;
+        setForm((current) => ({
+          ...current,
+          startTime: slot,
+          endTime: nextEnd
+        }));
+      }
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      endTime: slot
+    }));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -397,32 +441,16 @@ function BookingForm({
               <span>Игра</span>
               <input value={form.gameTitle} onChange={(event) => setForm({ ...form, gameTitle: event.target.value })} />
             </label>
-            <label className="field">
-              <span>Время начала</span>
-              <div className="slot-list" role="listbox" aria-label="Время начала">
-                {startSlotStates.map(({ slot, blocked }) => (
+            <label className="field field--wide">
+              <span>{`Тайм-слот: ${form.startTime}-${form.endTime}`}</span>
+              <div className="slot-list" role="listbox" aria-label="Тайм-слот">
+                {slotStates.map(({ slot, blocked, inSelectedRange }) => (
                   <button
                     key={slot}
                     type="button"
-                    className={`slot-button ${form.startTime === slot ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
+                    className={`slot-button ${inSelectedRange ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
                     disabled={blocked}
-                    onClick={() => setForm({ ...form, startTime: slot })}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </label>
-            <label className="field">
-              <span>Время конца</span>
-              <div className="slot-list" role="listbox" aria-label="Время конца">
-                {endSlotStates.map(({ slot, blocked }) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    className={`slot-button ${form.endTime === slot ? "slot-button--selected" : ""} ${blocked ? "slot-button--blocked" : ""}`}
-                    disabled={blocked}
-                    onClick={() => setForm({ ...form, endTime: slot })}
+                    onClick={() => handleSlotSelect(slot)}
                   >
                     {slot}
                   </button>
