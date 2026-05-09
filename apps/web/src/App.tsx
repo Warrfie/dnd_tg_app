@@ -156,44 +156,34 @@ function Layout({ children, loading, error }: { children: ReactNode; loading: bo
 }
 
 function HomeScreen({
-  currentUserName,
   tables,
   currentStates,
   bookings
 }: {
-  currentUserName: string;
   tables: TableRecord[];
   currentStates: TableCurrentState[];
   bookings: BookingRecord[];
 }) {
   const navigate = useNavigate();
+  const { date } = useParams();
   const now = new Date();
   const today = startOfDay(now);
+  const selectedDate = date ? new Date(`${date}T00:00:00`) : today;
   const bookingWindowEnd = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
   const months = useMemo(
     () => [new Date(now.getFullYear(), now.getMonth(), 1), new Date(now.getFullYear(), now.getMonth() + 1, 1)],
     [now],
   );
 
-  const upcomingBookings = [...bookings]
-    .filter((booking) => booking.status === "active" && new Date(booking.endAt) >= now)
-    .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime())
-    .slice(0, 8);
-
   const currentByTable = new Map(currentStates.map((state) => [state.tableId, state]));
+  const dayBookings = bookings
+    .filter((booking) => booking.status === "active" && isSameDay(new Date(booking.startAt), selectedDate))
+    .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
+
+  if (Number.isNaN(selectedDate.getTime())) return <Navigate to="/" replace />;
 
   return (
     <>
-      <header className="hero">
-        <p className="eyebrow">Клуб</p>
-        <h1>GG1 Настолки в Нячанге</h1>
-        <div className="hero__meta">
-          <span>{`Сейчас в приложении: ${currentUserName}`}</span>
-          <span>2 стола</span>
-          <span>Окно бронирования: 30 дней</span>
-        </div>
-      </header>
-
       <section className="section-grid">
         {tables.map((table) => {
           const state = currentByTable.get(table.id);
@@ -215,7 +205,7 @@ function HomeScreen({
                     }
                   : undefined
               }
-              onSelect={() => navigate(`/day/${toDateInputValue(today)}`)}
+              onSelect={() => navigate(`/day/${toDateInputValue(selectedDate)}`)}
             />
           );
         })}
@@ -224,26 +214,43 @@ function HomeScreen({
       <section className="panel">
         <div className="panel__header">
           <div>
-            <p className="eyebrow">Ближайшие игры</p>
-            <h2>Предстоящие брони</h2>
+            <p className="eyebrow">День</p>
+            <h2>{fullDate.format(selectedDate)}</h2>
           </div>
         </div>
-        <div className="booking-feed">
-          {upcomingBookings.map((booking) => (
-            <button key={booking.id} type="button" className="feed-item" onClick={() => navigate(`/booking/${booking.id}`)}>
-              <div className="feed-item__time">
-                <strong>{dayLabel.format(new Date(booking.startAt))}</strong>
-                <span>{formatTimeRange(booking)}</span>
-              </div>
-              <div className="feed-item__content">
-                <strong>{booking.gameTitle}</strong>
-                <span>{booking.tableName}</span>
-                <span className={booking.isPrivate ? "audience-label audience-label--private" : "audience-label audience-label--open"}>
-                  {`${bookingAudienceLabel(booking)} · ${booking.joinedCount}/${booking.participantsCount} мест`}
-                </span>
-              </div>
-            </button>
-          ))}
+        <div className="day-layout">
+          {tables.map((table) => {
+            const tableBookings = dayBookings.filter((booking) => booking.tableId === table.id);
+            return (
+              <section key={table.id} className="day-panel">
+                <div className="panel__header">
+                  <div>
+                    <p className="eyebrow">{table.name}</p>
+                    <h3>{tableBookings.length > 0 ? "Расписание стола" : "Стол свободен"}</h3>
+                  </div>
+                  <button type="button" className="ghost-button" onClick={() => navigate(`/booking/new?date=${toDateInputValue(selectedDate)}&tableId=${table.id}`)}>
+                    Забронировать стол
+                  </button>
+                </div>
+
+                <div className="schedule-list">
+                  {tableBookings.length > 0 ? tableBookings.map((booking) => (
+                    <button key={booking.id} type="button" className="schedule-card" onClick={() => navigate(`/booking/${booking.id}`)}>
+                      <div className="schedule-card__top">
+                        <strong>{formatTimeRange(booking)}</strong>
+                        <span className={booking.isPrivate ? "audience-label audience-label--private" : "audience-label audience-label--open"}>
+                          {bookingAudienceLabel(booking)}
+                        </span>
+                      </div>
+                      <h3>{booking.gameTitle}</h3>
+                      <p>{formatMemberLabel(booking.organizer, booking.organizerUsername)}</p>
+                      <p>{`${booking.joinedCount}/${booking.participantsCount} мест`}</p>
+                    </button>
+                  )) : <div className="empty-state">На этот день броней нет. Можно создать новую бронь для этого стола.</div>}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </section>
 
@@ -283,7 +290,7 @@ function HomeScreen({
                     <button
                       key={date.toISOString()}
                       type="button"
-                      className={["day-cell", `day-cell--${occupancy}`, isCurrentMonth ? "" : "day-cell--outside", isPast || isWindowLocked ? "day-cell--locked" : ""].join(" ")}
+                      className={["day-cell", `day-cell--${occupancy}`, isCurrentMonth ? "" : "day-cell--outside", isPast || isWindowLocked ? "day-cell--locked" : "", isSameDay(date, selectedDate) ? "day-cell--selected" : ""].join(" ")}
                       onClick={() => navigate(`/day/${toDateInputValue(date)}`)}
                     >
                       <span className="day-cell__number">{date.getDate()}</span>
@@ -295,64 +302,6 @@ function HomeScreen({
             </section>
           ))}
         </div>
-      </section>
-    </>
-  );
-}
-
-function DayScreen({ tables, bookings }: { tables: TableRecord[]; bookings: BookingRecord[] }) {
-  const navigate = useNavigate();
-  const { date } = useParams();
-  const selectedDate = date ? new Date(`${date}T00:00:00`) : new Date();
-
-  if (Number.isNaN(selectedDate.getTime())) return <Navigate to="/" replace />;
-
-  const dayBookings = bookings
-    .filter((booking) => booking.status === "active" && isSameDay(new Date(booking.startAt), selectedDate))
-    .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
-
-  return (
-    <>
-      <header className="screen-header">
-        <button type="button" className="ghost-button" onClick={() => navigate("/")}>Назад</button>
-        <div>
-          <h1>{fullDate.format(selectedDate)}</h1>
-        </div>
-      </header>
-
-      <section className="day-layout">
-        {tables.map((table) => {
-          const tableBookings = dayBookings.filter((booking) => booking.tableId === table.id);
-          return (
-            <section key={table.id} className="panel">
-              <div className="panel__header">
-                <div>
-                  <p className="eyebrow">{table.name}</p>
-                  <h2>{tableBookings.length > 0 ? "Расписание стола" : "Стол свободен"}</h2>
-                </div>
-                <button type="button" className="ghost-button" onClick={() => navigate(`/booking/new?date=${toDateInputValue(selectedDate)}&tableId=${table.id}`)}>
-                  Забронировать стол
-                </button>
-              </div>
-
-              <div className="schedule-list">
-                {tableBookings.length > 0 ? tableBookings.map((booking) => (
-                  <button key={booking.id} type="button" className="schedule-card" onClick={() => navigate(`/booking/${booking.id}`)}>
-                    <div className="schedule-card__top">
-                      <strong>{formatTimeRange(booking)}</strong>
-                      <span className={booking.isPrivate ? "audience-label audience-label--private" : "audience-label audience-label--open"}>
-                        {bookingAudienceLabel(booking)}
-                      </span>
-                    </div>
-                    <h3>{booking.gameTitle}</h3>
-                    <p>{formatMemberLabel(booking.organizer, booking.organizerUsername)}</p>
-                    <p>{`${booking.joinedCount}/${booking.participantsCount} мест`}</p>
-                  </button>
-                )) : <div className="empty-state">На этот день броней нет. Можно создать новую бронь для этого стола.</div>}
-              </div>
-            </section>
-          );
-        })}
       </section>
     </>
   );
@@ -673,8 +622,8 @@ export function App() {
   return (
     <Layout loading={loading} error={error}>
       <Routes>
-        <Route path="/" element={<HomeScreen currentUserName={currentUserName} tables={tables} currentStates={currentStates} bookings={bookings} />} />
-        <Route path="/day/:date" element={<DayScreen tables={tables} bookings={bookings} />} />
+        <Route path="/" element={<HomeScreen tables={tables} currentStates={currentStates} bookings={bookings} />} />
+        <Route path="/day/:date" element={<HomeScreen tables={tables} currentStates={currentStates} bookings={bookings} />} />
         <Route path="/booking/new" element={<BookingForm mode="create" onSaved={upsertBooking} />} />
         <Route path="/booking/:bookingId/edit" element={<BookingEditScreen currentUserId={currentUserId} currentUserName={currentUserName} onSaved={upsertBooking} />} />
         <Route path="/booking/:bookingId" element={<BookingViewScreen currentUserId={currentUserId} currentUserName={currentUserName} onChanged={(booking, removedId) => {

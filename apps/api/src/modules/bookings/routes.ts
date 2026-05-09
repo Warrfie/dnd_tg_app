@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { parseClubDateTime } from "../../common/club-time.js";
 import { prisma } from "../../common/prisma.js";
 import { requireTelegramMember } from "../auth/current-member.js";
 import { assertBookingRules } from "./validators.js";
@@ -91,8 +92,8 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const payload = bookingSchema.parse(request.body);
-    const startAt = new Date(`${payload.date}T${payload.startTime}:00`);
-    const endAt = new Date(`${payload.date}T${payload.endTime}:00`);
+    const startAt = parseClubDateTime(payload.date, payload.startTime);
+    const endAt = parseClubDateTime(payload.date, payload.endTime);
 
     try {
       assertBookingRules(startAt, endAt);
@@ -165,8 +166,8 @@ export const bookingRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ ok: false, error: "Редактировать бронь может только создатель" });
     }
 
-    const startAt = new Date(`${payload.date}T${payload.startTime}:00`);
-    const endAt = new Date(`${payload.date}T${payload.endTime}:00`);
+    const startAt = parseClubDateTime(payload.date, payload.startTime);
+    const endAt = parseClubDateTime(payload.date, payload.endTime);
 
     try {
       assertBookingRules(startAt, endAt);

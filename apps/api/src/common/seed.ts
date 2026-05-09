@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { atClubDate } from "./club-time.js";
 
 const starterMembers = [
   { firstName: "Саша", isAdmin: true },
@@ -15,13 +16,6 @@ const starterMembers = [
   { firstName: "Оля", isAdmin: false },
   { firstName: "Женя", isAdmin: false }
 ];
-
-function atLocalDate(base: Date, addDaysCount: number, hours: number, minutes = 0) {
-  const value = new Date(base);
-  value.setDate(value.getDate() + addDaysCount);
-  value.setHours(hours, minutes, 0, 0);
-  return value;
-}
 
 export async function ensureSeedData() {
   const tableCount = await prisma.table.count();
@@ -62,8 +56,8 @@ export async function ensureSeedData() {
       participantsCount: 5,
       isPrivate: true,
       openToJoin: false,
-      startAt: atLocalDate(now, 0, 19, 0),
-      endAt: atLocalDate(now, 0, 22, 30)
+      startAt: atClubDate(now, 0, 19, 0),
+      endAt: atClubDate(now, 0, 22, 30)
     },
     {
       tableId: 2,
@@ -74,8 +68,8 @@ export async function ensureSeedData() {
       participantsCount: 3,
       isPrivate: false,
       openToJoin: true,
-      startAt: atLocalDate(now, 2, 13, 0),
-      endAt: atLocalDate(now, 2, 17, 0)
+      startAt: atClubDate(now, 2, 13, 0),
+      endAt: atClubDate(now, 2, 17, 0)
     },
     {
       tableId: 1,
@@ -86,8 +80,8 @@ export async function ensureSeedData() {
       participantsCount: 3,
       isPrivate: false,
       openToJoin: true,
-      startAt: atLocalDate(now, 3, 15, 0),
-      endAt: atLocalDate(now, 3, 20, 0)
+      startAt: atClubDate(now, 3, 15, 0),
+      endAt: atClubDate(now, 3, 20, 0)
     },
     {
       tableId: 2,
@@ -98,8 +92,8 @@ export async function ensureSeedData() {
       participantsCount: 4,
       isPrivate: false,
       openToJoin: true,
-      startAt: atLocalDate(now, 4, 19, 0),
-      endAt: atLocalDate(now, 4, 23, 0)
+      startAt: atClubDate(now, 4, 19, 0),
+      endAt: atClubDate(now, 4, 23, 0)
     }
   ];
 
